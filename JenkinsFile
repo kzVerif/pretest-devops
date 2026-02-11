@@ -1,0 +1,102 @@
+// pipeline {
+//     agent any
+    
+//     tools {
+//         nodejs 'NodeJS' 
+//     }
+
+//     environment {
+//         // แก้ตรงนี้! เปลี่ยนจาก vercel-token เป็น VERCEL_TOKEN ให้ตรงกับในรูปมึงเป๊ะๆ
+//         VERCEL_TOKEN = credentials('VERCEL_TOKEN') 
+//     }
+
+//     stages {
+//         stage('Test npm') {
+//             steps {
+//                 echo 'Installing dependencies...'
+//                 sh 'npm install' 
+//                 // ใส่ || true กันเหนียว ไว้ข้าม error
+//                 sh 'npm test || true' 
+//             }
+//         }
+
+//         stage('Build') {
+//             steps {
+//                 echo 'Building the project...'
+//                 sh 'npm run build'
+//             }
+//         }
+
+//         stage('Test Build') {
+//             steps {
+//                 echo 'Checking build artifacts...'
+//                 sh 'ls -la .next' 
+//             }
+//         }
+
+//         stage('Deploy') {
+//             steps {
+//                 echo 'Deploying to Vercel...'
+//                 sh 'npm install -g vercel'
+//                 // สั่ง Deploy โดยใช้ Token ตัวใหญ่ที่ดึงมา
+//                 sh 'vercel --prod --token $VERCEL_TOKEN --yes'
+//             }
+//         }
+//     }
+// }
+
+pipeline {
+  environment {
+    VERCEL_PROJECT_NAME = 'pretest-devops'
+    VERCEL_TOKEN = credentials('vercel-token') // ดึงจาก Jenkins
+  }
+  agent any
+      
+    tools {
+        nodejs 'NodeJS' 
+    }
+
+  stages {
+    stage('Test npm') {
+      steps {
+        container('my-builder') {
+          sh 'npm --version'
+          sh 'node --version'
+        }
+      }
+    }
+    stage('Build') {
+      steps {
+        container('my-builder') {
+          sh 'npm ci'
+          sh 'npm run build'
+        }
+      }
+    }
+    stage('Test Build') {
+      steps {
+        container('my-builder') {
+          sh 'npm run test'
+        }
+      }
+    }
+    stage('Deploy') {
+      steps {
+        container('my-builder') {
+          sh 'npm install -g vercel@latest'
+          // Deploy using token-only (non-interactive)
+          sh '''
+            vercel link --project $VERCEL_PROJECT_NAME --token $VERCEL_TOKEN --yes
+            vercel --token $VERCEL_TOKEN --prod --confirm
+          '''
+        }
+      }
+    }
+ 
+  }
+  post {
+    always {
+      junit 'test-results/junit.xml'
+    }
+  }
+}
